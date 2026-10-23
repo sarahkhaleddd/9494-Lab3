@@ -8,7 +8,7 @@
  * NOTE: You are responsible for fixing any bugs this code may have!
  *
  */
-
+#include <glob.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -22,6 +22,7 @@
 #include <wordexp.h>
 #include <vector>
 #include <string>
+#include <cstring>
 #include <cctype>
 #include <iostream>
 #include <sstream>
@@ -308,10 +309,27 @@ void Command::execute()
                 }
                 dup2(fd,STDERR_FILENO);
                 close(fd);
-}
-            execvp(_simpleCommands[i]->_arguments[0],_simpleCommands[i]->_arguments);
-            perror("execvp");
-            exit(1);
+            }
+                char **args=_simpleCommands[i]->_arguments;
+                std::vector<char*>expanded;
+                glob_t matches;
+                for(int j=0; args[j]!= NULL;j++) {
+                    if (strpbrk(args[j], "*?")!=NULL) {
+                        if(glob(args[j],0,NULL,&matches) == 0) {
+                            for (size_t k = 0; k < matches.gl_pathc; k++)
+                                     expanded.push_back(strdup(matches.gl_pathv[k]));
+                               globfree(&matches);
+                        }else{
+                            expanded.push_back(args[j]);
+                        }
+                    }else{
+                        expanded.push_back(args[j]);
+                    }
+                }
+                expanded.push_back(NULL);
+                execvp(expanded[0],expanded.data());
+                perror("execvp");
+                exit(1);    
         }
         else if(pid<0)
         {
