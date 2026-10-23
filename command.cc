@@ -49,7 +49,7 @@ void parse(std::vector<Token> &tokens)
 	if (tokens[i].type == TOKEN_EOF)
 		break;
     if (tokens[i].type == TOKEN_COMMAND && tokens[i].value=="exit"){
-        std::cout << "Goodbye!!" << std::endl;
+        std::cout << "Good bye!!" << std::endl;
         exit(0);
     }
     if(tokens[i].type==TOKEN_COMMAND&& tokens[i].value=="cd")
@@ -246,6 +246,7 @@ void Command::execute()
     print();
     int previousInput=-1;
     int pipefd[2];
+    std::vector<pid_t> childPids;
     for(int i=0;i<_numberOfSimpleCommands;i++)
     {
     if(i<_numberOfSimpleCommands-1){
@@ -318,6 +319,7 @@ void Command::execute()
             clear();
             return;
         }
+        childPids.push_back(pid);
         if(previousInput!=-1)
             close(previousInput);
         if(i<_numberOfSimpleCommands-1)
@@ -330,8 +332,8 @@ void Command::execute()
         close(previousInput);
     if(!_background)
     {
-        for(int i=0;i<_numberOfSimpleCommands;i++)
-            wait(NULL);
+        for(pid_t childPid : childPids)
+        waitpid(childPid, NULL, 0);
     }
     clear();
 }
