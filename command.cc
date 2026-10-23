@@ -41,7 +41,16 @@ void parse(std::vector<Token> &tokens)
 	char *argument= strdup(tokens[i].value.c_str());
 	currentSimpleCommand->insertArgument(argument);
 	}
-     }
+    else if (tokens[i].type ==TOKEN_REDIRECT || tokens[i].type ==TOKEN_APPEND ){
+        if (i+1<tokens.size() && tokens[i+1].type != TOKEN_EOF){
+            currentCommand._outFile=strdup(tokens[i+1].value.c_str());
+            if (tokens[i].type==TOKEN_APPEND)
+            currentCommand._append=1;
+
+            i++;
+        }
+    }
+    }
     if (currentSimpleCommand->_numberOfArguments >0){
 	currentCommand.insertSimpleCommand(currentSimpleCommand);
 }
@@ -170,8 +179,23 @@ void Command::execute()
     pid_t pid = fork();
     if(pid==0)
     {   
-        execvp(_simpleCommands[0]->_arguments[0],_simpleCommands[0]->_arguments);
-        perror("execvp");
+        if(_outFile!=NULL)
+        {
+        int flags = O_WRONLY | O_CREAT;
+        if(_append)
+            flags |=O_APPEND;
+        else
+            flags |=O_TRUNC;
+
+        int fd=open(_outFile,flags,0644);
+        if (fd<0){
+            perror("open");
+            exit(1);
+        }
+        dup2(fd, STDOUT_FILENO);
+        close(fd);
+        }
+        execvp(_simpleCommands[0]->_arguments[0], _simpleCommands[0]->_arguments);
         exit(1);
     }
     else if(pid>0)
