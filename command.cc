@@ -37,6 +37,26 @@ void parse(std::vector<Token> &tokens)
     for (int i=0; i<tokens.size(); i++){
 	if (tokens[i].type == TOKEN_EOF)
 		break;
+    if (tokens[i].type == TOKEN_COMMAND && tokens[i].value=="exit"){
+        std::cout << "Goodbye!!" << std::endl;
+        exit(0);
+    }
+    if(tokens[i].type==TOKEN_COMMAND&& tokens[i].value=="cd")
+    {const char *path=NULL;
+    if(i+1 < tokens.size() && tokens[i+1].type!=TOKEN_EOF && tokens[i+1].type!=TOKEN_BACKGROUND)
+    {
+        path=tokens[i+1].value.c_str();
+    }
+    else{
+        path=getenv("HOME");
+    }
+    if(chdir(path)!=0){
+        perror("cd");
+    }
+    currentCommand.clear();
+    return;
+}
+
 	if (tokens[i].type == TOKEN_COMMAND || tokens[i].type == TOKEN_ARGUMENT){
 	char *argument= strdup(tokens[i].value.c_str());
 	currentSimpleCommand->insertArgument(argument);
@@ -77,6 +97,10 @@ void parse(std::vector<Token> &tokens)
          if (currentSimpleCommand->_numberOfArguments > 0)
         currentCommand.insertSimpleCommand(currentSimpleCommand);
         currentSimpleCommand= new SimpleCommand();
+    }
+    else if (tokens[i].type == TOKEN_BACKGROUND)
+    {
+    currentCommand._background = 1;
     }
 
     }
@@ -239,10 +263,10 @@ void Command::execute()
                 close(pipefd[0]);
                 close(pipefd[1]);
             }
-            if(_outFile!=NULL)
+            if (_outFile != NULL && i == _numberOfSimpleCommands - 1)
             {
                 int flags=O_WRONLY|O_CREAT;
-                if(_append||_out_error)
+                if(_append)
                     flags|=O_APPEND;
                 else
                     flags|=O_TRUNC;
@@ -259,7 +283,7 @@ void Command::execute()
             }
             if(_errFile!=NULL&&!_out_error)
             {
-                int fd=open(_errFile,O_WRONLY|O_CREAT|O_APPEND,0644);
+                int fd=open(_errFile,O_WRONLY|O_CREAT|O_TRUNC,0644);
                 if(fd<0)
                 {
                     perror("open");
@@ -298,12 +322,18 @@ void Command::execute()
 
 void Command::prompt()
 {
-    printf("myshell>");
-    fflush(stdout);
+
     std::string input;
     while (true)
     {
-        std::getline(std::cin, input); 
+        printf("myshell>");
+        fflush(stdout);
+
+        if(!std::getline(std::cin, input))
+        {
+            printf("\n");
+            break;
+        }
         std::vector<Token> tokens = tokenize(input);
         parse(tokens);
     }
@@ -311,9 +341,21 @@ void Command::prompt()
 
 Command Command::_currentCommand;
 SimpleCommand *Command::_currentSimpleCommand;
-
+void childHandler(int signal){
+    int status;
+    pid_t pid;
+    while ((pid = waitpid(-1,&status, WNOHANG))>0){
+        FILE *log=fopen("child.log","a");
+        if(log!=NULL){
+            fprintf(log, "Child process %d terminated\n", pid);
+            fclose(log);
+        }
+    }
+}
 int main()
 {
+    signal(SIGINT, SIG_IGN);
+    signal(SIGCHLD, childHandler);
     Command::_currentCommand.prompt();
     return 0;
 }
