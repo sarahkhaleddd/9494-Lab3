@@ -50,6 +50,17 @@ void parse(std::vector<Token> &tokens)
             i++;
         }
     }
+    else if(tokens[i].type== TOKEN_INPUT){
+        if(i+1<tokens.size()&&tokens[i+1].type!=TOKEN_EOF){
+            currentCommand._inputFile=strdup(tokens[i+1].value.c_str());
+            i++;
+        }
+    }
+    else if(tokens[i].type==TOKEN_PIPE){
+         if (currentSimpleCommand->_numberOfArguments > 0)
+        currentCommand.insertSimpleCommand(currentSimpleCommand);
+        currentSimpleCommand= new SimpleCommand();
+    }
     }
     if (currentSimpleCommand->_numberOfArguments >0){
 	currentCommand.insertSimpleCommand(currentSimpleCommand);
@@ -170,41 +181,86 @@ void Command::print()
 
 void Command::execute()
 {
-    if (_numberOfSimpleCommands==0)
-    {   
+   if (_numberOfSimpleCommands==0){
         clear();
         return;
     }
     print();
-    pid_t pid = fork();
-    if(pid==0)
-    {   
-        if(_outFile!=NULL)
-        {
-        int flags = O_WRONLY | O_CREAT;
-        if(_append)
-            flags |=O_APPEND;
-        else
-            flags |=O_TRUNC;
-
-        int fd=open(_outFile,flags,0644);
-        if (fd<0){
-            perror("open");
+    int previousInput=-1;
+    int pipefd[2];
+    for(int i=0;i<_numberOfSimpleCommands;i++)
+    {
+    if(i<_numberOfSimpleCommands-1){
+            if(pipe(pipefd)==-1)
+            {
+                perror("pipe");
+                clear();
+                return;
+            }
+        }
+        pid_t pid=fork();
+        if(pid==0){
+            if(previousInput!=-1){
+                dup2(previousInput,STDIN_FILENO);
+                close(previousInput);
+            }
+            else if(_inputFile!=NULL)
+            {
+                int fd=open(_inputFile,O_RDONLY);
+                if(fd<0)
+                {
+                    perror("open");
+                    exit(1);
+                }
+                dup2(fd,STDIN_FILENO);
+                close(fd);
+            }
+            if(i<_numberOfSimpleCommands-1)
+            {
+                dup2(pipefd[1],STDOUT_FILENO);
+                close(pipefd[0]);
+                close(pipefd[1]);
+            }
+            else if(_outFile!=NULL)
+            {
+                int flags=O_WRONLY|O_CREAT;
+                if(_append)
+                    flags|=O_APPEND;
+                else
+                    flags|=O_TRUNC;
+                int fd=open(_outFile,flags,0644);
+                if(fd<0)
+                {
+                    perror("open");
+                    exit(1);
+                }
+                dup2(fd,STDOUT_FILENO);
+                close(fd);
+            }
+            execvp(_simpleCommands[i]->_arguments[0],_simpleCommands[i]->_arguments);
+            perror("execvp");
             exit(1);
         }
-        dup2(fd, STDOUT_FILENO);
-        close(fd);
+        else if(pid<0)
+        {
+            perror("fork");
+            clear();
+            return;
         }
-        execvp(_simpleCommands[0]->_arguments[0], _simpleCommands[0]->_arguments);
-        exit(1);
+        if(previousInput!=-1)
+            close(previousInput);
+        if(i<_numberOfSimpleCommands-1)
+        {
+            close(pipefd[1]);
+            previousInput=pipefd[0];
+        }
     }
-    else if(pid>0)
+    if(previousInput!=-1)
+        close(previousInput);
+    if(!_background)
     {
-        waitpid(pid,NULL,0);
-    }
-    else
-    {
-        perror("fork");
+        for(int i=0;i<_numberOfSimpleCommands;i++)
+            wait(NULL);
     }
     clear();
 }
