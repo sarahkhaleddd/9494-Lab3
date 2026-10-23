@@ -34,13 +34,18 @@ void parse(std::vector<Token> &tokens)
     Command currentCommand;
     SimpleCommand *currentSimpleCommand = new SimpleCommand();
 
+    for (int i=0; i<tokens.size(); i++){
+	if (tokens[i].type == TOKEN_EOF)
+		break;
+	if (tokens[i].type == TOKEN_COMMAND || tokens[i].type == TOKEN_ARGUMENT){
+	char *argument= strdup(tokens[i].value.c_str());
+	currentSimpleCommand->insertArgument(argument);
+	}
+     }
+    if (currentSimpleCommand->_numberOfArguments >0){
+	currentCommand.insertSimpleCommand(currentSimpleCommand);
+}
     currentCommand.execute();
-    /*
-      Implement this function 
-      you must parse for all possible tokens scenario
-      right now command.execute only print the format , you will inject it in your logic.
-
-    */
 }
 
 SimpleCommand::SimpleCommand()
@@ -68,14 +73,16 @@ void SimpleCommand::insertArgument(char *argument)
 Command::Command()
 {
     _numberOfAvailableSimpleCommands = 1;
-    _simpleCommands = (SimpleCommand **)
-        malloc(_numberOfSimpleCommands * sizeof(SimpleCommand *));
-
     _numberOfSimpleCommands = 0;
+    _simpleCommands = (SimpleCommand **)
+        malloc(_numberOfAvailableSimpleCommands * sizeof(SimpleCommand *));
+
     _outFile = 0;
     _inputFile = 0;
     _errFile = 0;
+    _out_error=0;
     _background = 0;
+    _append=0;
 }
 
 void Command::insertSimpleCommand(SimpleCommand *simpleCommand)
@@ -154,13 +161,28 @@ void Command::print()
 
 void Command::execute()
 {
+    if (_numberOfSimpleCommands==0)
+    {   
+        clear();
+        return;
+    }
     print();
-    /*
-        Write your code here
-    */
-
+    pid_t pid = fork();
+    if(pid==0)
+    {   
+        execvp(_simpleCommands[0]->_arguments[0],_simpleCommands[0]->_arguments);
+        perror("execvp");
+        exit(1);
+    }
+    else if(pid>0)
+    {
+        waitpid(pid,NULL,0);
+    }
+    else
+    {
+        perror("fork");
+    }
     clear();
-    prompt();
 }
 
 void Command::prompt()
