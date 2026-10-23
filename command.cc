@@ -31,6 +31,17 @@
 
 void parse(std::vector<Token> &tokens)
 {
+        for (int i=0; i<tokens.size(); i++) {
+        if (tokens[i].type==TOKEN_PIPE &&
+            (i==0 ||
+             i+1>= tokens.size() ||
+             tokens[i-1].type== TOKEN_PIPE ||
+             tokens[i+1].type==TOKEN_EOF ||
+             tokens[i+1].type==TOKEN_PIPE)) {
+            std::cerr<<"Syntax error: malformed pipe" << std::endl;
+            return;
+        }
+    }
     Command currentCommand;
     SimpleCommand *currentSimpleCommand = new SimpleCommand();
 
@@ -62,13 +73,18 @@ void parse(std::vector<Token> &tokens)
 	currentSimpleCommand->insertArgument(argument);
 	}
     else if (tokens[i].type ==TOKEN_REDIRECT || tokens[i].type ==TOKEN_APPEND ){
-        if (i+1<tokens.size() && tokens[i+1].type != TOKEN_EOF){
+        if (i+1<tokens.size() && tokens[i+1].type !=TOKEN_ARGUMENT){
+
+        std::cerr << "Syntax error: missing filename" << std::endl;
+        return;
+    }
             currentCommand._outFile=strdup(tokens[i+1].value.c_str());
+            
             if (tokens[i].type==TOKEN_APPEND)
             currentCommand._append=1;
 
             i++;
-        }
+
     }
     else if(tokens[i].type== TOKEN_ERROR)
     {
