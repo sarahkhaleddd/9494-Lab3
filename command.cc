@@ -50,6 +50,23 @@ void parse(std::vector<Token> &tokens)
             i++;
         }
     }
+    else if(tokens[i].type== TOKEN_ERROR)
+    {
+        if(i+1<tokens.size()&&tokens[i+1].type!=TOKEN_EOF){
+        currentCommand._errFile=strdup(tokens[i+1].value.c_str());
+            i++;
+        }
+    }
+    else if(tokens[i].type==TOKEN_REDIRECT_AND_ERROR)
+    {
+    if(i+1<tokens.size()&&tokens[i+1].type!=TOKEN_EOF)
+    {
+        currentCommand._outFile=strdup(tokens[i+1].value.c_str());
+        currentCommand._errFile=strdup(tokens[i+1].value.c_str());
+        currentCommand._out_error=1;
+        i++;
+    }
+    }
     else if(tokens[i].type== TOKEN_INPUT){
         if(i+1<tokens.size()&&tokens[i+1].type!=TOKEN_EOF){
             currentCommand._inputFile=strdup(tokens[i+1].value.c_str());
@@ -61,6 +78,7 @@ void parse(std::vector<Token> &tokens)
         currentCommand.insertSimpleCommand(currentSimpleCommand);
         currentSimpleCommand= new SimpleCommand();
     }
+
     }
     if (currentSimpleCommand->_numberOfArguments >0){
 	currentCommand.insertSimpleCommand(currentSimpleCommand);
@@ -221,10 +239,10 @@ void Command::execute()
                 close(pipefd[0]);
                 close(pipefd[1]);
             }
-            else if(_outFile!=NULL)
+            if(_outFile!=NULL)
             {
                 int flags=O_WRONLY|O_CREAT;
-                if(_append)
+                if(_append||_out_error)
                     flags|=O_APPEND;
                 else
                     flags|=O_TRUNC;
@@ -235,8 +253,21 @@ void Command::execute()
                     exit(1);
                 }
                 dup2(fd,STDOUT_FILENO);
+                if(_out_error)
+                    dup2(fd,STDERR_FILENO);
                 close(fd);
             }
+            if(_errFile!=NULL&&!_out_error)
+            {
+                int fd=open(_errFile,O_WRONLY|O_CREAT|O_APPEND,0644);
+                if(fd<0)
+                {
+                    perror("open");
+                    exit(1);
+                }
+                dup2(fd,STDERR_FILENO);
+                close(fd);
+}
             execvp(_simpleCommands[i]->_arguments[0],_simpleCommands[i]->_arguments);
             perror("execvp");
             exit(1);
